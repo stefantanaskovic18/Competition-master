@@ -1,0 +1,1149 @@
+Ime i prezime: Djordje Milenkovic
+Broj indeksa: NRT-78/14
+
+### klase
+
+===== glavni/Main.java =====
+
+package glavni;
+
+public class Main
+{
+    public static void main(String[] args)
+    {
+        while(true)
+        {
+            MainMenu.glavniMeni();
+        }
+    }
+}
+
+===== glavni/BazaPodataka =====
+
+package glavni;
+import java.sql.*;
+
+public class BazaPodataka
+{
+    private Connection conn;
+    private static BazaPodataka instanca;
+
+    private BazaPodataka()
+    {
+        try
+        {
+            Class.forName("org.sqlite.JDBC");
+            conn = DriverManager.getConnection("jdbc:sqlite:Nrt7814_djordje_milenkovic.sql");
+        }catch (Exception e)
+        {
+            System.err.println("Greska pri konektovanju na bazu podataka"+e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    public ResultSet select(String sql) throws SQLException
+    {
+        Statement statement = conn.createStatement();
+        return statement.executeQuery(sql);
+    }
+
+    public int uidQuery(String sql) throws SQLException
+    {
+        Statement statement  = conn.createStatement();
+        return statement.executeUpdate(sql);
+    }
+
+    public static BazaPodataka getInstanca()
+    {
+        if(instanca == null)
+            instanca = new BazaPodataka();
+        return instanca;
+    }
+}
+
+===== glavni/FileManager =====
+
+package glavni;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+
+public final class FileManager
+{
+    private static ArrayList<String> procitaj(String putanja)
+    {
+        try
+        {
+            ArrayList<String> lines = (ArrayList) Files.readAllLines(Paths.get(""+putanja), Charset.forName("UTF-8"));
+            return lines;
+        }catch (Exception e)
+        {
+            System.err.println("Greska! Rad ne moze da se procita. Pokusajte da uneste ponovo ime foldera/rada. Ili proverite da li vam se rad nalazi u folderu radovi ako ste prijavljeni kao takmicar."+e.getMessage());
+        }
+        return null;
+    }
+    public static boolean upisi(String putanja, String imeDatoteke)
+    {
+        try
+        {
+            ArrayList<String> sadrzaj = FileManager.procitaj(putanja);
+            if(sadrzaj == null)
+                return false;
+            FileWriter fw = new FileWriter("Datoteke/predatiRadovi/"+imeDatoteke, false);
+            PrintWriter out = new PrintWriter(fw);
+            for(int i=0; i<sadrzaj.size(); i++)
+            {
+                out.print(sadrzaj.get(i)+System.getProperty("line.separator"));
+            }
+            out.close();
+            fw.close();
+            return true;
+        }catch (Exception e)
+        {
+            System.err.println("Greska pri predaji rada.");
+        }
+        return false;
+    }
+    // metoda za proveru u funkciji informacije koju poziva takmicar. Proverava da li je takmicar predao rad u folder predatiRadovi.
+    public static boolean daLiPostoji(String nazivFajla, String folder)
+    {
+        File f = new File("Datoteke/"+folder);
+        if(f.exists())
+        {
+            String []lista = f.list();
+            for(String fajl:lista)
+            {
+                if(fajl.equals(nazivFajla))
+                    return true;
+            }
+        }
+        return false;
+    }
+    // ova metoda je za clana komisije, da bi video rad takmicara
+    public static boolean procitajSadrzajRada(String imeDatoteke)
+    {
+        ArrayList<String> sadrzaj = procitaj("Datoteke/predatiRadovi/"+imeDatoteke);
+        if(sadrzaj != null)
+        {
+            System.out.println("\n**********Rad takmcara "+imeDatoteke.split(".txt")[0]+"**********");
+            for(int i=0; i<sadrzaj.size(); i++)
+            {
+                System.out.println(sadrzaj.get(i));
+            }
+            return true;
+        }
+        return false;
+    }
+    // kada administrator brise takmicara, da se obrisu i radovi
+    public static boolean obrisiRadIzDatoteke(String username)
+    {
+        File f = new File("Datoteke/radovi/"+username);
+        if(f.exists())
+        {
+            f.delete();
+        }
+        f = new File("Datoteke/predatiRadovi/"+username);
+        if(f.exists())
+        {
+            f.delete();
+            return true;
+        }
+        return false;
+    }
+}
+
+===== glavni/IzuzetakUnosa =====
+
+package glavni;
+
+public class IzuzetakUnosa extends Exception
+{
+    private String poruka;
+
+    public IzuzetakUnosa(String poruka)
+    {
+        this.poruka = poruka;
+    }
+
+    public String toString()
+    {
+        return poruka;
+    }
+
+}
+
+===== glavni/MainMenu =====
+
+package glavni;
+import korisnici.*;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Scanner;
+
+public final class MainMenu
+{
+    private static boolean validacija(String username, String password)
+    {
+        String sql = "SELECT korisnickoIme, sifra FROM korisnici WHERE korisnickoIme = \""+username+"\" AND sifra = \""+password+"\"";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            ResultSet rs = bp.select(sql);
+            String korisnickoIme = rs.getString("korisnickoIme");
+            String sifra = rs.getString("sifra");
+            if(korisnickoIme.equals(username) && sifra.equals(password))
+                return true;
+            else
+                return false;
+        }catch (SQLException e)
+        {
+            return false;
+        }
+    }
+    public static void glavniMeni()
+    {
+        String odluka;
+        Scanner scan = new Scanner(System.in);
+        System.out.println("************************************");
+        System.out.println("|  0. Izadjite iz aplikacije       |");
+        System.out.println("|  1. Ulogujte se                  |");
+        System.out.println("|  2. Vidite rang listu takmicara  |");
+        System.out.println("************************************");
+        do
+        {
+            System.out.print("Izaberite opciju: ");
+            odluka = scan.nextLine();
+        } while (!Regex.unosGlavniMeni(odluka));
+        int counter=3;
+        switch (odluka)
+        {
+            case "0":
+                MainMenu.izadji();
+            case "1":
+                while(counter>=1)
+                {
+                    try
+                    {
+                        String username;
+                        String password;
+                        do
+                        {
+                            System.out.print("Unesite korisnicko ime: ");
+                            username = scan.nextLine();
+                        }while (!Regex.sifra(username));
+                        do
+                        {
+                            System.out.print("Unesite sifru: ");
+                            password = scan.nextLine();
+                        }while (!Regex.sifra(password));
+                        if(validacija(username, password))
+                        {
+                            if(username.indexOf('a')==0)
+                            {
+                                User admin = Administrator.login(username, password);
+                                ((Administrator)admin).glavniMeni();
+                                break;
+                            }
+                            else if(username.indexOf('k')==0)
+                            {
+                                User commision = Commision.login(username, password);
+                                ((Commision)commision).glavniMeni();
+                                break;
+                            }
+                            else
+                            {
+                                User competitor = Competitor.login(username, password);
+                                ((Competitor)competitor).glavniMeni();
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            counter--;
+                            if(counter==0)
+                            {
+                                System.out.println("3 puta sta pogresili korisnicko ime ili lozinku. Aplikacija se ovde zaustavlja.");
+                                System.exit(0);
+                            }
+                            throw new IzuzetakUnosa("\nPogresno korisnicko ime ili sifra. Imate jos "+counter+" pokusaja");
+                        }
+                    }catch (IzuzetakUnosa i)
+                    {
+                        System.out.println(i);
+                    }
+                }
+                break;
+            case "2":
+                RangLista.ispisiRangListu();
+                break;
+        }
+
+    }
+    private static void izadji()
+    {
+        System.out.println("Dovidjenja");
+        System.exit(0);
+    }
+}
+
+
+===== glavni/Regex =====
+
+package glavni;
+
+public final class Regex
+{
+    public static boolean unosGlavniMeni(String unos)
+    {
+        return unos.matches("[0-2]");
+    }
+
+    public static boolean unosAdminMeni(String unos)
+    {
+        return unos.matches("[0-3]");
+    }
+
+    public static boolean ocena(String unos)
+    {
+        return unos.matches("[1-9]") || unos.matches("[1-1][0-0]");
+    }
+
+    public static boolean korisnickoIme(String unos)
+    {
+        return unos.matches("\\w{2,20}");
+    }
+
+    public static boolean sifra(String unos)
+    {
+        return unos.matches(".+");
+    }
+}
+
+===== korisnici/Administrator =====
+
+package korisnici;
+import glavni.DB;
+import glavni.FileManager;
+import glavni.Regex;
+import meniji.Meni;
+import glavni.IzuzetakUnosa;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Scanner;
+
+public class Administrator extends User implements Meni
+{
+    // --------------ATTRIBUTES-------------------
+
+    private static Administrator instanca = null;
+    private Scanner scan = new Scanner(System.in);
+
+    // --------------METHODS---------------------
+
+    private Administrator(String korisnickoIme, String sifra)
+    {
+        super(korisnickoIme, sifra);
+    }
+    public static Administrator login(String ime, String pass)
+    {
+        if(instanca == null)
+        {
+            instanca = new Administrator(ime, pass);
+            System.out.println("Uspesno ste se ulogovali kao administrator: "+instanca);
+        }
+        return instanca;
+    }
+    public void logout()
+    {
+        instanca = null;
+        System.out.println("Uspesno ste se odjavili.");
+    }
+    public String toString()
+    {
+        if(instanca != null)
+            return super.toString();
+        return "";
+    }
+    @Override
+    public void glavniMeni()
+    {
+        String odluka;
+        while(instanca!=null)
+        {
+            System.out.println("*****************************");
+            System.out.println("| 0. Izlogujte se           |");
+            System.out.println("| 1. Dodajte takmicara      |");
+            System.out.println("| 2. Dodajte clana komisije |");
+            System.out.println("| 3. Obrisite korisnika     |");
+            System.out.println("*****************************");
+            do
+            {
+                System.out.print("Izaberite opciju: ");
+                odluka = scan.nextLine();
+            }while (!Regex.unosAdminMeni(odluka));
+            switch (odluka)
+            {
+                case "0":
+                    logout();
+                    break;
+                case "1":
+                    dodajTakmicara();
+                    break;
+                case "2":
+                    dodajKomisiju();
+                    break;
+                case "3":
+                    obrisiKorisnika();
+                    break;
+            }
+        }
+    }
+
+    // METODE ZA DODAVANJE NOVOG TAKMICARA
+
+    private ArrayList<String> sviKorisnici()
+    {
+        String sql = "SELECT korisnickoIme FROM korisnici";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        ArrayList<String> listaTakmicara = new ArrayList<>();
+        try
+        {
+            ResultSet rs = bp.select(sql);
+            while (rs.next())
+            {
+                String username = rs.getString("korisnickoIme");
+                listaTakmicara.add(username);
+            }
+            return listaTakmicara;
+        }catch (Exception e)
+        {
+            System.err.println("Greska pri dohvatanju podataka iz baze.");
+        }
+        return null;
+    }
+    private boolean ubaciTakmicaraUBazu(String username, String sifra)
+    {
+        String sql = "INSERT INTO korisnici (korisnickoIme, sifra) VALUES (\""+username+"\", \""+sifra+"\")";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+                return true;
+        }catch (Exception e)
+        {
+            System.err.println("Korisnicko ime vec postoji. Pokusajte sa nekim drugim.");
+        }
+        return false;
+    }
+
+    private boolean ubaciRad()
+    {
+        String sql = "INSERT INTO radovi (korisnikID, komentar) VALUES ((SELECT MAX(korisnikID) FROM korisnici), \"Nije predat rad\")";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+                return true;
+        }catch (Exception e)
+        {
+            return false;
+        }
+        return false;
+    }
+    private void dodajTakmicara()
+    {
+        String username;
+        String sifra;
+        try
+        {
+            do
+            {
+                System.out.print("Unesite korisnicko ime takmicara (moze imati samo alfa-numericke znakove i ne vise od 20 karaktera): ");
+                username = scan.nextLine();
+            }while (!Regex.korisnickoIme(username));
+            do
+            {
+                System.out.print("Unesite sifru za novog takmicara: ");
+                sifra = scan.nextLine();
+            }while (!Regex.sifra(sifra));
+            if(username.indexOf('t')!=0)
+                throw new IzuzetakUnosa("Greska pri dodavanju novog takmicara. Korisnicko ime takmicara mora imati pocetno slovo t.");
+            else
+            {
+                if(ubaciTakmicaraUBazu(username, sifra) && ubaciRad())
+                {
+                    System.out.println("Uspesno dodat novi takmicar!");
+                }
+            }
+
+        }catch (IzuzetakUnosa i)
+        {
+            System.out.println(i);
+        }catch (Exception e)
+        {
+            System.err.println("Desila se neka katastrofalna greska."+e);
+        }
+    }
+
+    // METODE ZA DODAVANJE NOVOG CLANA KOMISIJE
+
+    private void dodajKomisiju()
+    {
+        String username;
+        String sifra;
+        try
+        {
+            do
+            {
+                System.out.print("Unesite korisnicko ime za clana komisije: ");
+                username = scan.nextLine();
+            }while (!Regex.korisnickoIme(username));
+            do
+            {
+                System.out.print("Unesite sifru za novog clana komisije: ");
+                sifra = scan.nextLine();
+            }while (!Regex.sifra(sifra));
+            if(username.indexOf('k')!=0)
+                throw new IzuzetakUnosa("Greska pri dodavanju novog clana komisije. Korisnicko ime komisije mora imati pocetno slovo k.");
+            else
+            {
+                ubaciKomisijuUBazu(username, sifra);
+            }
+        }catch (IzuzetakUnosa i)
+        {
+            System.out.println(i);
+        }catch (Exception e)
+        {
+            System.err.println("Desila se neka katastrofalna greska.");
+        }
+
+    }
+    private boolean ubaciKomisijuUBazu(String username, String sifra)
+    {
+        String sql = "INSERT INTO korisnici (korisnickoIme, sifra) VALUES (\""+username+"\", \""+sifra+"\")";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+            {
+                System.out.println("Uspesno dodat novi clan komisije!");
+                return true;
+            }
+        }catch (SQLException e)
+        {
+            System.err.println("Greska pri ubacivanju novog clana komisije. Probajte sa novim korisnickim imenom.");
+        }
+        return false;
+    }
+
+    // METODE ZA BRISANJE KORISNIKA APLIKACIJE
+
+    private boolean daLiJeUbazi(String username) throws IzuzetakUnosa
+    {
+        ArrayList<String> svi = sviKorisnici();
+        for(int i=0; i<svi.size(); i++)
+        {
+            if(svi.get(i).equals(username))
+                return true;
+        }
+        throw new IzuzetakUnosa("Uneli ste ime koje ne postoji u bazi.");
+    }
+    private void obrisiKorisnika()
+    {
+        System.out.println(sviKorisnici());
+        String izbor;
+        do
+        {
+            System.out.print("Unesite korisnicko ime korisnika kojeg zelite da obrisete: ");
+            izbor = scan.nextLine();
+        }while (!Regex.korisnickoIme(izbor));
+        try
+        {
+            daLiJeUbazi(izbor);
+        }catch (IzuzetakUnosa i)
+        {
+            System.out.println(i);
+        }
+        if(izbor.indexOf('t')==0)
+        {
+            obrisiRadIzBaze(izbor);
+            FileManager.obrisiRadIzDatoteke(izbor+".txt");
+        }
+        if(izbor.indexOf('a')==0 && !izbor.equals(this.getKorisnickoIme()))
+        {
+            System.out.println("Ne mozete obrisati drugog administratora!");
+        }
+        String sql = "DELETE FROM korisnici WHERE korisnickoIme = \""+izbor+"\"";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+            {
+                // ako admin zeli sebe da obrise
+                if(izbor.equals(this.getKorisnickoIme()))
+                {
+                    this.logout();
+                    System.out.println("Deaktivirali ste svoj nalog");
+                    logout();
+                }
+                System.out.println("User je uspesno obrisan.");
+            }
+        }catch (SQLException e)
+        {
+            System.err.println("Greska pri brisanju korisnika. Pokusajte ponovo."+e.getMessage());
+        }
+    }
+    private boolean obrisiRadIzBaze(String username)
+    {
+        String sql = "DELETE FROM radovi WHERE korisnikID = (SELECT korisnikID FROM korisnici WHERE korisnickoIme = \""+username+"\")";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+            {
+                System.out.println("Korisnikov rad je uspesno obrisan");
+                return true;
+            }
+        }catch (Exception e)
+        {
+            System.err.println("Greska pri brisanju rada iz baze.");
+        }
+        return false;
+    }
+}
+
+===== korisnici/Commision =====
+
+package korisnici;
+
+import glavni.DB;
+import glavni.FileManager;
+import glavni.Regex;
+import meniji.Meni;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Scanner;
+
+public class Commision extends User implements Meni
+{
+    // -------------ATTRIBUTES---------------
+
+    private static Commision instanca;
+    private Scanner scan = new Scanner(System.in);
+
+    // --------------METHODS-----------------
+
+    private Commision(String korisnickoIme, String sifra)
+    {
+        super(korisnickoIme, sifra);
+    }
+    public static Commision login(String ime, String pass)
+    {
+        if(instanca == null)
+        {
+            instanca = new Commision(ime, pass);
+            System.out.println("Uspesno ste se ulogovali kao clan komisije: "+instanca);
+        }
+        return instanca;
+    }
+    public String toString()
+    {
+        if(instanca!=null)
+            return super.toString();
+        return "";
+    }
+    @Override
+    public void glavniMeni()
+    {
+        String odluka;
+        while (instanca!=null)
+        {
+            System.out.println("*****************************");
+            System.out.println("| 0. Odjavite se            |");
+            System.out.println("| 1. Prikazi spisak radova  |");
+            System.out.println("| 2. Oceni rad              |");
+            System.out.println("*****************************");
+            do
+            {
+                System.out.print("Izaberite opciju: ");
+                odluka = scan.nextLine();
+            }while (!Regex.unosGlavniMeni(odluka));
+            switch (odluka)
+            {
+                case "0":
+                    logout();
+                    break;
+                case "1":
+                    radovi();
+                    break;
+                case "2":
+                    oceniRad();
+                    break;
+            }
+        }
+    }
+    @Override
+    public void logout()
+    {
+        instanca = null;
+        System.out.println("Uspesno ste se odjavili.");
+    }
+
+
+    private void radovi()
+    {
+        ArrayList<String> listaRadova = RadovizaOcenjivanje();
+        if(listaRadova.size()==0)
+        {
+            System.out.println("Trenutno ni jedan takmicar nije predao svoj rad.");
+        }
+        else
+        {
+            System.out.println(listaRadova);
+        }
+    }
+    private static ArrayList<String> RadovizaOcenjivanje()
+    {
+        String sql = "SELECT korisnickoIme FROM korisnici, radovi WHERE korisnici.korisnikID = radovi.korisnikID AND komentar = \"U fazi ocenjivanja\"";
+        ArrayList<String> predatiRadovi = new ArrayList<>();
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            ResultSet rs = bp.select(sql);
+            while (rs.next())
+            {
+                String username = rs.getString("korisnickoIme");
+                predatiRadovi.add(username);
+            }
+            return predatiRadovi;
+        }catch (SQLException e)
+        {
+            System.err.println("Greska pri dohvatanju podataka o predatim radovima");
+        }
+        return null;
+    }
+    private boolean oceniRad()
+    {
+        if(RadovizaOcenjivanje().size()==0)
+        {
+            System.out.println("Trenutno ni jedan takmicar nije predao svoj rad.");
+            return false;
+        }
+        else
+            System.out.println(RadovizaOcenjivanje());
+        String izborRada;
+        do
+        {
+            System.out.print("Izaberite rad koji zelite da ocenite: ");
+            izborRada = scan.nextLine();
+        }while (!Regex.korisnickoIme(izborRada));
+
+        if(FileManager.procitajSadrzajRada(izborRada+".txt"))
+        {
+            String ocene[] = new String[3];
+            String sveOcene;
+            String komentar;
+            System.out.println();
+            do
+            {
+                System.out.println("Ocene unosite sledecim redosledom: Kvalitet koda, Tacnost koda, Opsti utisak. Napisati u jednoj liniji u terminalu. Ocene razdvojiti jednim razmakom. ");
+                System.out.print("Unesite: ");
+                sveOcene = scan.nextLine();
+                if(sveOcene.split(" ").length==3)
+                {
+                    ocene[0] = sveOcene.split(" ")[0];
+                    ocene[1] = sveOcene.split(" ")[1];
+                    ocene[2] = sveOcene.split(" ")[2];
+                }
+            }while (sveOcene.split(" ").length!=3 || !Regex.ocena(ocene[0]) || !Regex.ocena(ocene[1]) || !Regex.ocena(ocene[2]));
+            do
+            {
+                System.out.print("Unesite zavrsni komentar za rad: ");
+                komentar = scan.nextLine();
+            }while (!Regex.sifra(komentar));
+            if(unesiOcenuUBazu(izborRada, Integer.parseInt(ocene[0]), Integer.parseInt(ocene[1]), Integer.parseInt(ocene[2]), komentar))
+                return true;
+        }
+        return false;
+    }
+    private boolean unesiOcenuUBazu(String username, int kvalitetKoda, int tacnostKoda, int opstiUtisak, String komentar)
+    {
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        double srednjaOcena = (kvalitetKoda+tacnostKoda+opstiUtisak)/3.0;
+        srednjaOcena = Math.round(srednjaOcena*100.0)/100.0;
+        String sql = "UPDATE radovi SET kvalitetKoda = "+kvalitetKoda+", tacnostKoda = "+tacnostKoda+", opstiUtisak = "+opstiUtisak+", srednjaOcena = "+srednjaOcena+", komentar = \""+komentar.trim()+"\" WHERE korisnikID = (SELECT korisnikID FROM korisnici WHERE korisnickoIme = \""+username+"\")";
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+            {
+                System.out.println("Uspesno ste ocenili takmicara");
+                return true;
+            }
+        }catch (Exception e)
+        {
+            System.err.println("Greska pri ubacivanju ocene u bazu!"+e.getMessage());
+        }
+        return false;
+    }
+}
+
+
+===== korisnici/Competitior =====
+
+package korisnici;
+
+import glavni.DB;
+import glavni.FileManager;
+import glavni.Regex;
+import meniji.Meni;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Scanner;
+
+public class Competitor extends User implements Meni
+{
+    // ---------------ATTRIBUTES----------------
+
+    private static Competitor instanca;
+    private Scanner scan = new Scanner(System.in);
+
+    // ---------------METHODS------------------
+
+    private Competitor(String korisnickoIme, String sifra)
+    {
+        super(korisnickoIme, sifra);
+    }
+    @Override
+    public void logout()
+    {
+        instanca = null;
+        System.out.println("Uspesno ste se odjavili.");
+    }
+    @Override
+    public void glavniMeni()
+    {
+        String odluka;
+        while(instanca!=null)
+        {
+            System.out.println("*******************************************");
+            System.out.println("| 0. Odjavi se                            |");
+            System.out.println("| 1. Predaj rad                           |");
+            System.out.println("| 2. Pogledaj informacije o predatom radu |");
+            System.out.println("*******************************************");
+            do
+            {
+                System.out.print("Izaberite opciju: ");
+                odluka = scan.nextLine();
+            }while (!Regex.unosGlavniMeni(odluka));
+            switch (odluka)
+            {
+                case "0":
+                {
+                    this.logout();
+                    break;
+                }
+                case "1":
+                {
+                    this.predajRad();
+                    break;
+                }
+                case "2":
+                {
+                    this.informacijeOradu();
+                    break;
+                }
+            }
+        }
+
+    }
+    public static Competitor login(String ime, String pass)
+    {
+        if(instanca == null)
+        {
+            instanca = new Competitor(ime, pass);
+        }
+        System.out.println("Uspesno ste se ulogovali kao takmicar: "+instanca);
+        return instanca;
+    }
+    public String toString()
+    {
+        if(instanca!=null)
+            return super.toString();
+        return "";
+    }
+
+    private boolean informacijeOradu()
+    {
+
+        if(!FileManager.daLiPostoji(this.getKorisnickoIme()+".txt", "predatiRadovi"))
+        {
+            System.out.println("Morate prvo predati rad da bi vam komisija ocenila isti.");
+            return false;
+        }
+        String sql = "SELECT kvalitetKoda, tacnostKoda, opstiUtisak, srednjaOcena, komentar FROM radovi, korisnici WHERE radovi.korisnikID = korisnici.korisnikID AND korisnickoIme = \""+this.getKorisnickoIme()+"\"";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            ResultSet rs = bp.select(sql);
+            int kvalitetKoda = rs.getInt("kvalitetKoda");
+            int tacnostKoda = rs.getInt("tacnostKoda");
+            int opstiUtisak = rs.getInt("opstiUtisak");
+            double ocena = rs.getDouble("srednjaOcena");
+            String komentar = rs.getString("komentar");
+
+            if(komentar.equals("U fazi ocenjivanja"))
+            {
+                System.out.println(komentar);
+                return true;
+            }
+            else
+            {
+                System.out.println("-------------------------------------------------------");
+                System.out.println("Kvalitet koda: "+kvalitetKoda);
+                System.out.println("Tacnost koda: "+tacnostKoda);
+                System.out.println("Opsti utisak: "+opstiUtisak);
+                System.out.println("Vasa konacna ocena je: "+ocena+" - komentar: "+komentar);
+                System.out.println("-------------------------------------------------------");
+                return true;
+            }
+
+
+        }catch (Exception e)
+        {
+            System.err.println("Gresk pri preuzimanju komentara iz baze.");
+        }
+        return false;
+    }
+    private boolean ocenjen(String username)
+    {
+        String sql = "SELECT srednjaOcena FROM radovi WHERE korisnikID = (SELECT korisnikID FROM korisnici WHERE korisnickoIme = \""+username+"\")";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            ResultSet rs = bp.select(sql);
+            //String komentar = rs.getString("komentar");
+            //if(komentar.equals("U fazi ocenjivanja"))
+            double srednjaOcena = rs.getDouble("srednjaOcena");
+            if((char)srednjaOcena != '\u0000')
+            {
+                System.out.println("Vas rad je ocenjen.");
+                return true;
+            }
+        }catch (SQLException e)
+        {
+            System.err.println("Greska pri proveri da li je rad ocenjen.");
+        }
+        return false;
+    }
+    private boolean predajRad()
+    {
+        if(ocenjen(this.getKorisnickoIme()))
+        {
+           return false;
+        }
+        String folder;
+        do
+        {
+            System.out.print("Upisite apsolutnu putanju do vaseg rada: ");
+            folder = scan.nextLine();
+        }while (!Regex.sifra(folder));
+        if(FileManager.upisi(folder, this.getKorisnickoIme()+".txt") && promeniKomentar(this.getKorisnickoIme()))
+        {
+            System.out.println("Uspesno ste predali vas rad na ocenjivanje.");
+            return true;
+        }
+        return false;
+    }
+    private boolean promeniKomentar(String username)
+    {
+        String sql = "UPDATE radovi SET komentar = \"U fazi ocenjivanja\" WHERE korisnikID = (SELECT korisnikID FROm korisnici WHERE korisnickoIme = \""+username+"\")";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        try
+        {
+            int x = bp.uidQuery(sql);
+            if(x!=0)
+                return true;
+        }catch (SQLException e)
+        {
+            System.err.println("Greska pri predaji rada.");
+        }
+        return false;
+    }
+}
+
+
+===== korisnici/RangLista =====
+
+
+package korisnici;
+
+import glavni.DB;
+
+import java.sql.ResultSet;
+import java.util.ArrayList;
+
+public class RangLista
+{
+    // --------- ATTRIBUTES ------------
+
+    private String takmicar;
+    private int kvalitetKoda;
+    private int tacnostKoda;
+    private int opstiUtisak;
+    private double srednjaOcena;
+
+    // ---------- METHODS -------------
+
+    private RangLista(String takmicar, int kvalitetKoda, int tacnostKoda, int opstiUtisak, double srednjaOcena)
+    {
+        this.takmicar = takmicar;
+        this.kvalitetKoda = kvalitetKoda;
+        this.tacnostKoda = tacnostKoda;
+        this.opstiUtisak = opstiUtisak;
+        this.srednjaOcena = srednjaOcena;
+    }
+
+    private static ArrayList<RangLista>formirajRangListu()
+    {
+        String sql = "SELECT korisnickoIme, kvalitetKoda, tacnostKoda, opstiUtisak, srednjaOcena FROM korisnici, radovi WHERE korisnici.korisnikID = radovi.korisnikID AND srednjaOcena NOT NULL ORDER BY 5 DESC";
+        BazaPodataka bp = BazaPodataka.getInstanca();
+        ArrayList<RangLista>rangLista = new ArrayList<>();
+        try
+        {
+            ResultSet rs = bp.select(sql);
+            while (rs.next())
+            {
+                String username = rs.getString("korisnickoIme");
+                int kvalitet = rs.getInt("kvalitetKoda");
+                int tacnost = rs.getInt("tacnostKoda");
+                int utisak = rs.getInt("opstiUtisak");
+                double ocena = rs.getDouble("srednjaOcena");
+                rangLista.add(new RangLista(username, kvalitet, tacnost, utisak, ocena));
+            }
+            return rangLista;
+        }catch (Exception e)
+        {
+            System.err.println("Greska pri dohvartanju podataka iz baze za rang listu.");
+        }
+        return null;
+    }
+
+    public static void ispisiRangListu()
+    {
+        ArrayList<RangLista> lista = formirajRangListu();
+        if(lista!=null)
+        {
+            System.out.println("\n\t\t\t\t\t\t\t\t\t*************** RANG LISTA *****************\n");
+            System.out.println("\t\t   takmicar\t\t      kvalitet koda\t\t   tacnost koda\t\t  opsti utisak\t\t    srednja ocena");
+            System.out.println("\t\t   --------\t\t      -------------\t\t   ------------\t\t  ------------\t\t    -------------");
+            for(int i=0; i<lista.size(); i++)
+            {
+                System.out.println("\t\t"+(i+1)+"\t"+lista.get(i));
+            }
+            System.out.print("\n");
+        }
+    }
+
+    public String toString()
+    {
+        return takmicar+"\t\t || \t\t"+kvalitetKoda+"\t\t || \t\t"+tacnostKoda+"\t\t || \t\t"+opstiUtisak+"\t\t || \t\t"+srednjaOcena;
+    }
+}
+
+
+===== korisnici/User =====
+
+package korisnici;
+
+public abstract class User
+{
+    // --------------ATTRIBUTES-----------------
+
+    protected String korisnickoIme;
+    protected String sifra;
+
+    // --------------METHODS-------------------
+
+
+    protected String getKorisnickoIme()
+    {
+        return korisnickoIme;
+    }
+
+    protected User(String korisnickoIme, String sifra)
+    {
+        this.korisnickoIme = korisnickoIme;
+        this.sifra = sifra;
+    }
+
+    public String toString()
+    {
+        return korisnickoIme;
+    }
+
+    public abstract void logout();
+}
+
+
+===== meniji/Meni =====
+
+package meniji;
+
+public interface Meni
+{
+    void glavniMeni();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
